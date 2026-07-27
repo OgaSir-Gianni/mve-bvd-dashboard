@@ -1,0 +1,8 @@
+{
+  "server": "https://kf.kobotoolbox.org",
+  "asset_uid": "aSRXXJyKAoa8xUy6BT4vxi",
+  "title": "RDC – MVE/BVD : mise à jour quotidienne du terrain",
+  "geo_field": "",
+  "trend_field": "_submission_time",
+  "max_table_rows": 5000
+}
