@@ -4,18 +4,19 @@ A live, public dashboard for a KoboToolbox form. A scheduled GitHub Action pulls
 submissions from the Kobo API, saves them as JSON, and publishes a static site to
 GitHub Pages. Your API token stays a secret — it is never in the code or the page.
 
-Tailored to the MVE/BVD daily field sitrep:
+An operations-focused view of the MVE/BVD daily field sitrep (WHO-branded):
 
-- **Epidemic curve** — new confirmed cases & deaths per day, plus cumulative confirmed
-- **Key indicators** — cumulative cases/deaths, case fatality rate, alert investigation & contact follow-up rates
-- **Cases by health zone** (latest report per zone, deduplicated)
+- **Vue d'ensemble des opérations** — plain-language headline for leadership
+- **Operational KPIs** — zones reporting, % alerts investigated, % contacts seen, community relays, red zones, bottlenecks
 - **Field status today** (🟢/🟠/🔴), operational bottlenecks, urgent issues
-- **Response-pillar activity** — share of reports updating surveillance, IPC/WASH, lab, burials, RCCE, ops, HR, funding, PRSEAH
-- **Priorities** for the next 24–48h
-- **Daily narrative feed** — one-line summaries and urgent flags per zone, filterable by 🔴/🟠/🟢
-- **Completeness heatmap** — reporting completeness of key indicators, per province over time
-- **PDF briefing** and **light/dark mode**, with WHO branding
-- **Province filter** + filterable, sortable raw-data table
+- **FieldCo reporting** — how many reports each field coordinator submitted
+- **Where the action is** — response-pillar activity (surveillance, IPC/WASH, lab, burials, RCCE, ops, HR, funding, PRSEAH)
+- **Priorities** for the next 24–48h (colour-matched to the pillars)
+- **% alerts investigated per zone** and **% contacts followed per zone**
+- **Daily narrative feed** — summaries and urgent flags, filterable by 🔴/🟠/🟢
+- **Completeness heatmap** — reporting completeness of operational indicators, per province over time
+- **Province & reporting-date filters**, filterable/sortable table
+- **PDF briefing**, **light/dark mode**, **password gate**, and a **manual import failsafe**
 
 ## Failsafe: manual data import
 
