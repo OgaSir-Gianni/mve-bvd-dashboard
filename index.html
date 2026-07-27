@@ -32,6 +32,17 @@
   }
   *{box-sizing:border-box}
   [hidden]{display:none!important}
+  #gate{position:fixed;inset:0;z-index:200;display:none;align-items:center;justify-content:center;padding:24px;
+    background:radial-gradient(1000px 600px at 50% 0%,#16222f,#0a0f16 70%)}
+  .gate-card{width:340px;max-width:100%;background:#141d29;border:1px solid #263447;border-radius:16px;
+    padding:30px 28px;display:flex;flex-direction:column;gap:12px;text-align:center;box-shadow:0 30px 60px -20px rgba(0,0,0,.6)}
+  .gate-card .logo{height:44px;width:auto;margin:0 auto 6px;object-fit:contain}
+  .gate-card h1{font-family:"Fraunces",Georgia,serif;color:#eef3f9;font-size:19px;margin:0}
+  .gate-card p{color:#8598ac;font-size:13px;margin:0 0 8px}
+  .gate-card input{background:#0e141d;border:1px solid #263447;border-radius:9px;padding:11px 13px;color:#eef3f9;font-size:14px;font-family:"IBM Plex Sans",sans-serif}
+  .gate-card input:focus{outline:1px solid #43c0cb}
+  .gate-card button{justify-content:center;padding:11px;margin-top:4px}
+  .gate-err{color:#e2564a;font-size:12.5px;min-height:16px}
   html{scroll-behavior:smooth}
   body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--sans);-webkit-font-smoothing:antialiased;line-height:1.5;
        background-image:var(--body-glow);transition:background-color .35s ease,color .35s ease}
@@ -165,6 +176,17 @@
 </style>
 </head>
 <body>
+<div id="gate">
+  <form id="gateForm" class="gate-card">
+    <img class="logo" src="assets/who-logo.png" alt="WHO" onerror="this.style.display='none'">
+    <h1>Briefing terrain — MVE/BVD</h1>
+    <p>Accès réservé. Veuillez vous identifier.</p>
+    <input id="gateUser" type="text" placeholder="Nom d'utilisateur" autocomplete="username" autocapitalize="none">
+    <input id="gatePass" type="password" placeholder="Mot de passe" autocomplete="current-password">
+    <button type="submit" class="btn btn-pdf">Se connecter</button>
+    <div id="gateErr" class="gate-err"></div>
+  </form>
+</div>
 <div class="app">
 <header>
   <div class="brand">
@@ -723,7 +745,27 @@ function exportPDF(){
 
 function toast(m){const t=document.getElementById("toast");t.textContent=m;t.classList.add("show");clearTimeout(t._h);t._h=setTimeout(()=>t.classList.remove("show"),2600);}
 function esc(s){return String(s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));}
-boot();
+
+/* ---------- access gate (light protection) ---------- */
+const GATE_HASH="bc44783fa403c211ec6aa91dbf3acf3cad308a6f314994d4697800c8f14785bd";
+async function sha256(s){const b=await crypto.subtle.digest("SHA-256",new TextEncoder().encode(s));
+  return[...new Uint8Array(b)].map(x=>x.toString(16).padStart(2,"0")).join("");}
+let booted=false;
+function unlock(){document.getElementById("gate").style.display="none";if(!booted){booted=true;boot();}}
+function initGate(){
+  try{if(sessionStorage.getItem("mve_auth")==="1"){unlock();return;}}catch(e){}
+  const g=document.getElementById("gate");g.style.display="flex";
+  document.getElementById("gateForm").onsubmit=async e=>{
+    e.preventDefault();
+    const u=document.getElementById("gateUser").value.trim().toLowerCase();
+    const p=document.getElementById("gatePass").value;
+    let h="";try{h=await sha256(u+":"+p);}catch(err){h="";}
+    if(h===GATE_HASH){try{sessionStorage.setItem("mve_auth","1");}catch(e){}unlock();}
+    else{document.getElementById("gateErr").textContent="Identifiants incorrects.";document.getElementById("gatePass").value="";}
+  };
+  document.getElementById("gateUser").focus();
+}
+initGate();
 </script>
 </body>
 </html>
