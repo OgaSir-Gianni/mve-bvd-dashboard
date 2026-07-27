@@ -700,7 +700,7 @@ function toast(m){const t=document.getElementById("toast");t.textContent=m;t.cla
 function esc(s){return String(s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));}
 
 /* ---------- access gate (light protection) ---------- */
-const GATE_HASH="bc44783fa403c211ec6aa91dbf3acf3cad308a6f314994d4697800c8f14785bd";
+const GATE_HASH="a99941aaa33c614e716e5aadb8bd89c032800538043cd9a261fc48a25218dc87";
 async function sha256(s){const b=await crypto.subtle.digest("SHA-256",new TextEncoder().encode(s));return[...new Uint8Array(b)].map(x=>x.toString(16).padStart(2,"0")).join("");}
 let booted=false;
 function unlock(){document.getElementById("gate").style.display="none";if(!booted){booted=true;boot();}}
