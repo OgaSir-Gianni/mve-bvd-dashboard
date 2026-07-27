@@ -7,6 +7,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600;9..144,700&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="">
 <style>
   :root{
     --accent:#43c0cb; --green:#3fae6f; --amber:#e5983c; --red:#e2564a; --blue:#5a9bd4; --purple:#9182d6;
@@ -157,6 +158,15 @@
   .cmp-row-label{color:var(--ink);font-family:var(--serif);font-size:13px;font-weight:600;display:flex;align-items:center;padding-right:8px}
   .cmp-empty{background:var(--panel-2);color:var(--muted)}
 
+  .filterbar{display:flex;gap:18px;align-items:flex-end;flex-wrap:wrap;margin-bottom:20px;background:var(--panel);border:1px solid var(--line-solid);border-radius:12px;padding:14px 18px;box-shadow:var(--shadow)}
+  .filterbar .fb{display:flex;flex-direction:column;gap:5px}
+  .filterbar label{font-size:10.5px;color:var(--muted);text-transform:uppercase;letter-spacing:.6px;font-weight:600}
+  .filterbar .fbicon{font-size:12px;color:var(--accent);font-weight:700;margin-right:6px}
+  #mapBox{z-index:0}
+  .leaflet-container{background:var(--panel-2);font-family:var(--sans)}
+  .maplegend{display:flex;gap:16px;flex-wrap:wrap;font-size:12px;color:var(--muted);margin:2px 0 12px}
+  .maplegend .k{display:inline-flex;align-items:center;gap:6px}
+  .maplegend .k i{width:11px;height:11px;border-radius:50%;display:inline-block}
   .mt{margin-top:16px}
   .err{background:#3a2020;border:1px solid #6b3a34;color:#f3c4bd;padding:16px 18px;border-radius:12px}
   @keyframes fadeUp{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}
@@ -187,8 +197,6 @@
     <div><h1 id="title">Vue d'ensemble des opérations</h1><div class="sub" id="subtitle">Chargement…</div></div>
   </div>
   <div class="ctrls">
-    <select id="provinceFilter"><option value="__all__">Toutes les provinces</option></select>
-    <select id="dateFilter"><option value="__all__">Toutes les dates</option></select>
     <input type="file" id="importInput" accept=".xlsx,.xls,.csv" hidden>
     <button class="btn btn-ghost" id="importBtn" title="Importer un export Kobo (.xlsx / .csv) en cas de coupure du lien">⬆ Importer (secours)</button>
     <button class="btn btn-ghost" id="themeBtn" title="Basculer clair / sombre">🌙 Sombre</button>
@@ -200,6 +208,13 @@
 <div class="wrap">
   <div id="content" hidden>
     <div id="manualBanner" class="banner" hidden></div>
+
+    <div class="filterbar">
+      <div class="fb"><label><span class="fbicon">📍</span>Province</label>
+        <select id="provinceFilter"><option value="__all__">Toutes les provinces</option></select></div>
+      <div class="fb"><label><span class="fbicon">📅</span>Date du rapport</label>
+        <select id="dateFilter"><option value="__all__">Toutes les dates</option></select></div>
+    </div>
 
     <div class="hero reveal">
       <div class="eyebrow">Vue d'ensemble des opérations</div>
@@ -216,9 +231,9 @@
         <p class="hint">Comment les équipes évaluent elles-mêmes leur situation lors du dernier jour de rapportage.</p>
         <div class="chart-box sm" style="height:175px"><canvas id="statusChart"></canvas></div>
         <div class="statgrid" id="statusStats"></div></div>
-      <div class="card"><h2>Rapportage des FieldCos</h2>
-        <p class="hint">Nombre de rapports transmis par chaque coordonnateur de terrain.</p>
-        <div class="chart-box sm"><canvas id="fieldcoChart"></canvas></div></div>
+      <div class="card"><h2>Rapportage par zone de santé</h2>
+        <p class="hint">Nombre de rapports transmis par zone de santé sur la période affichée.</p>
+        <div class="chart-box sm"><canvas id="zoneRepChart"></canvas></div></div>
       <div class="card"><h2>Où se concentre l'action</h2>
         <p class="hint">Part des rapports signalant une avancée, par domaine de la réponse.</p>
         <div class="chart-box sm"><canvas id="pillarChart"></canvas></div></div>
@@ -234,6 +249,17 @@
       <div class="card"><h2>% de contacts suivis par zone</h2>
         <p class="hint">Contacts vus ÷ contacts sous suivi, cumulé sur la période affichée.</p>
         <div class="chart-box tall"><canvas id="contactZoneChart"></canvas></div></div>
+    </div>
+
+    <div class="card full mt">
+      <h2>Carte des statuts par zone de santé</h2>
+      <p class="hint">Statut du dernier rapport de chaque zone. <span style="color:var(--muted)">Positions indicatives regroupées par province — le formulaire ne contient pas de coordonnées GPS.</span></p>
+      <div class="maplegend">
+        <span class="k"><i style="background:#3fae6f"></i>Dans les délais</span>
+        <span class="k"><i style="background:#e5983c"></i>Sous contrôle</span>
+        <span class="k"><i style="background:#e2564a"></i>Blocage majeur</span>
+      </div>
+      <div id="mapBox" style="height:440px;border-radius:12px;overflow:hidden"></div>
     </div>
 
     <div class="card full mt">
@@ -276,6 +302,7 @@
 <div id="toast"></div>
 
 <script src="assets/who-logo-b64.js"></script>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
@@ -383,10 +410,10 @@ function render(){
   const dates=[...new Set(recs.map(dateOf).filter(Boolean))].sort();const latest=dates[dates.length-1];
   document.getElementById("subtitle").textContent=`${recs.length} rapports · ${new Set(recs.map(zoneKey)).size} zones · ${dates.length?dates[0]+" → "+latest:"—"}`;
   buildHero(recs,latest);buildKpis(recs,latest);
-  buildStatus(recs,latest);buildFieldcos(recs);buildPillars(recs);buildPriorities(recs);
+  buildStatus(recs,latest);buildZoneReporting(recs);buildPillars(recs);buildPriorities(recs);
   buildZoneRate(recs,"alertZoneChart","alerts_received","alerts_investigated");
   buildZoneRate(recs,"contactZoneChart","contacts_under_follow_up","contacts_seen");
-  buildResponse(recs,latest);buildFeed(recs);buildTable(recs);buildCompleteness(recs,dates);}
+  buildMap(recs);buildResponse(recs,latest);buildFeed(recs);buildTable(recs);buildCompleteness(recs,dates);}
 
 function countUp(el,to,r){if(RM){el.textContent=r(to);return;}const dur=850,t0=performance.now();
   (function step(t){const p=Math.min(1,(t-t0)/dur),e=1-Math.pow(1-p,3);el.textContent=r(to*e);if(p<1)requestAnimationFrame(step);})(t0);}
@@ -443,13 +470,46 @@ function buildStatus(recs,latest){
   document.getElementById("statusStats").innerHTML=
     `<div class="statbox"><div class="n" style="color:${bott?C.red:C.green}">${bott}</div><div class="l">Goulots opérationnels (jour)</div></div><div class="statbox"><div class="n" style="color:${C.amber}">${urg}</div><div class="l">Problèmes urgents signalés</div></div>`;}
 
-function buildFieldcos(recs){
-  const c={};recs.forEach(r=>{const n=(r.submitted_by||"").toString().trim();if(n)c[n]=(c[n]||0)+1;});
-  const rows=Object.entries(c).map(([n,v])=>({n,v})).sort((a,b)=>b.v-a.v);
-  charts.fieldco&&charts.fieldco.destroy();
-  charts.fieldco=new Chart(document.getElementById("fieldcoChart"),{type:"bar",
-    data:{labels:rows.map(r=>r.n),datasets:[{data:rows.map(r=>r.v),backgroundColor:C.accent,borderRadius:3}]},
-    options:{indexAxis:"y",responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},tooltip:{callbacks:{label:c=>c.raw+" rapport(s)"}}},scales:{x:{beginAtZero:true,ticks:{precision:0}},y:{grid:{display:false}}}}});}
+function buildZoneReporting(recs){
+  const c={};recs.forEach(r=>{const z=choiceLabel("health_zone",zoneKey(r));if(z)c[z]=(c[z]||0)+1;});
+  const rows=Object.entries(c).map(([z,v])=>({z,v})).sort((a,b)=>b.v-a.v).slice(0,15);
+  charts.zonerep&&charts.zonerep.destroy();
+  charts.zonerep=new Chart(document.getElementById("zoneRepChart"),{type:"bar",
+    data:{labels:rows.map(r=>r.z),datasets:[{data:rows.map(r=>r.v),backgroundColor:C.accent,borderRadius:3}]},
+    options:{indexAxis:"y",responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},tooltip:{callbacks:{label:c=>c.raw+" rapport(s)"}}},scales:{x:{beginAtZero:true,ticks:{precision:0}},y:{grid:{display:false},ticks:{font:{size:10.5}}}}}});}
+
+/* status map (positions grouped by province; snaps to known zone coords) */
+const PROVINCE_CENTROID={"ituri":[1.6,30.05],"nord kivu":[0.05,29.35],"sud kivu":[-2.6,28.6],"tshopo":[0.52,25.2],"haut uele":[3.0,28.6],"bas uele":[3.9,24.8],"maniema":[-2.9,26.0]};
+const HEALTH_ZONE_COORDS={"beni":[0.49,29.47],"butembo":[0.14,29.29],"katwa":[0.13,29.30],"mabalako":[0.42,29.18],"mangina":[0.48,29.16],"oicha":[0.70,29.52],"kalunguta":[0.35,29.27],"lubero":[-0.16,29.24],"musienene":[0.02,29.30],"kyondo":[-0.02,29.30],"vuhovi":[0.20,29.35],"mambasa":[1.36,29.05],"komanda":[1.36,29.77],"nyankunde":[1.38,30.10],"mongbwalu":[1.93,30.03],"nizi":[1.72,30.02],"bunia":[1.56,30.25],"rwampara":[1.50,30.18],"kadutu":[-2.51,28.84],"bukavu":[-2.51,28.84],"kaniola":[-2.62,28.66],"minembwe":[-3.90,28.90],"kisangani":[0.52,25.20],"tshopo":[0.52,25.20]};
+function provKey(p){return norm(p).replace(/[_-]/g," ");}
+function strHash(s){let h=0;for(let i=0;i<s.length;i++){h=(h*31+s.charCodeAt(i))>>>0;}return h;}
+function zoneCoord(r){
+  const zn=norm(choiceLabel("health_zone",zoneKey(r)));
+  if(HEALTH_ZONE_COORDS[zn])return HEALTH_ZONE_COORDS[zn];
+  const pc=PROVINCE_CENTROID[provKey(r.province)]||[-1.0,28.0];
+  const h=strHash(zn);
+  return [pc[0]+((h%1000)/1000-0.5)*0.7,pc[1]+((Math.floor(h/1000)%1000)/1000-0.5)*0.7];
+}
+let leafletMap=null,mapMarkers=null,mapTiles=null;
+function buildMap(recs){
+  if(typeof L==="undefined")return;const el=document.getElementById("mapBox");if(!el)return;
+  if(!leafletMap)leafletMap=L.map(el,{scrollWheelZoom:false}).setView([0.3,29.2],6);
+  const light=document.documentElement.dataset.theme==="light";
+  const url=light?"https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png":"https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png";
+  if(mapTiles)leafletMap.removeLayer(mapTiles);
+  mapTiles=L.tileLayer(url,{attribution:"© OpenStreetMap © CARTO",maxZoom:12}).addTo(leafletMap);
+  if(mapMarkers)leafletMap.removeLayer(mapMarkers);
+  mapMarkers=L.layerGroup().addTo(leafletMap);
+  const pts=[];
+  latestPerZone(recs).forEach(r=>{const st=statusOf(r);const co=zoneCoord(r);if(!co)return;
+    const col=st?STATUS[st].col:C.muted;
+    L.circleMarker(co,{radius:8,color:col,weight:1.5,fillColor:col,fillOpacity:.78})
+      .bindTooltip(`<b>${esc(choiceLabel("health_zone",zoneKey(r)))}</b><br>${esc(r.province?choiceLabel("province",r.province):"")} · ${st?STATUS[st].emoji+" "+STATUS[st].lbl:"n/d"}`)
+      .addTo(mapMarkers);
+    pts.push(co);});
+  if(pts.length)leafletMap.fitBounds(L.latLngBounds(pts).pad(0.25));
+  setTimeout(()=>leafletMap.invalidateSize(),60);
+}
 
 function buildPillars(recs){
   const n=recs.length||1;
