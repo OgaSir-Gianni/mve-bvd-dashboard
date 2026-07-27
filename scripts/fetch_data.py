@@ -25,9 +25,10 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 def load_config():
     with open(os.path.join(ROOT, "config.json"), encoding="utf-8") as f:
         cfg = json.load(f)
-    # env overrides (used by CI)
-    cfg["server"] = os.environ.get("KOBO_SERVER", cfg["server"]).rstrip("/")
-    cfg["asset_uid"] = os.environ.get("KOBO_ASSET_UID", cfg["asset_uid"])
+    # env overrides (used by CI). Use "or" so an empty/undefined CI variable
+    # falls back to config.json instead of becoming an empty string.
+    cfg["server"] = (os.environ.get("KOBO_SERVER") or cfg["server"]).rstrip("/")
+    cfg["asset_uid"] = os.environ.get("KOBO_ASSET_UID") or cfg["asset_uid"]
     return cfg
 
 

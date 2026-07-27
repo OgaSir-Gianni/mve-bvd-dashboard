@@ -26,7 +26,11 @@ jobs:
         with:
           python-version: "3.12"
 
+      # Fetch is allowed to fail without blocking the deploy: if Kobo is
+      # unreachable or the token is missing, the site still ships with the
+      # last committed data/data.json (and the manual import failsafe).
       - name: Fetch latest Kobo data
+        continue-on-error: true
         env:
           KOBO_TOKEN: ${{ secrets.KOBO_TOKEN }}
           KOBO_SERVER: ${{ vars.KOBO_SERVER }}
