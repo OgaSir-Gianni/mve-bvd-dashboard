@@ -1,0 +1,34 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(git:*)",
+      "Bash(python3:*)",
+      "Bash(python:*)",
+      "Bash(curl:*)",
+      "Bash(node:*)",
+      "Bash(npx:*)",
+      "Bash(gh:*)",
+      "Bash(ls:*)",
+      "Bash(cat:*)",
+      "Bash(grep:*)",
+      "Bash(rg:*)",
+      "Bash(find:*)",
+      "Bash(sed:*)",
+      "Bash(awk:*)",
+      "Bash(head:*)",
+      "Bash(tail:*)",
+      "Bash(wc:*)",
+      "Bash(du:*)",
+      "Bash(shasum:*)",
+      "Bash(mkdir:*)",
+      "Bash(cp:*)",
+      "Bash(mv:*)",
+      "Bash(open:*)",
+      "Read(//Users/user/Desktop/Coding/projects/Kobo Visualization/**)",
+      "Edit(//Users/user/Desktop/Coding/projects/Kobo Visualization/**)",
+      "Write(//Users/user/Desktop/Coding/projects/Kobo Visualization/**)",
+      "WebFetch",
+      "WebSearch"
+    ]
+  }
+}

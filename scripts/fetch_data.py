@@ -21,6 +21,28 @@ from datetime import datetime, timezone
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
+# data/data.json is served from a public GitHub Pages URL, so anything left in a
+# record is world-readable regardless of the dashboard's access gate. These
+# fields identify the person or the handset behind a submission and carry no
+# analytical value, so they are dropped before the file is written.
+DROP_FIELDS = {
+    "submitted_by", "username", "deviceid", "subscriberid", "simserial",
+    "phonenumber", "imei", "uuid", "instanceid", "instanceID", "rootUuid",
+    "meta", "audit", "audit_URL", "formhub", "__version__", "_uuid",
+    "_submitted_by", "_validation_status", "_notes", "_tags", "_attachments",
+    "start", "end", "today",
+}
+
+# Long free-text narratives can name localities, staff and security incidents.
+# Set "redact_narratives": true in config.json to blank them in the public build
+# while keeping every numeric indicator intact.
+NARRATIVE_FIELDS = {
+    "urgent_details", "daily_summary", "surveillance_update_note",
+    "case_ipc_update_note", "lab_update_note", "sdb_update_note",
+    "rcce_update_note", "ops_update_note", "hr_update_note",
+    "funding_update_note", "prseah_update_note", "other_comments",
+}
+
 
 def load_config():
     with open(os.path.join(ROOT, "config.json"), encoding="utf-8") as f:
@@ -65,7 +87,7 @@ def build_schema(asset):
     for q in survey:
         qtype = q.get("type", "")
         name = q.get("$autoname") or q.get("name")
-        if not name:
+        if not name or name in DROP_FIELDS:
             continue
         label = q.get("label")
         if isinstance(label, list):
@@ -94,6 +116,27 @@ def fetch_all_submissions(server, uid, token):
         results.extend(page.get("results", []))
         url = page.get("next")
     return results
+
+
+def strip_identifiers(rec):
+    """Drop identifying keys from an already-flattened record, in place.
+
+    Returns the set of keys that were removed. Shared with scripts/scrub_data.py
+    so a file committed before this filter existed can be cleaned the same way.
+    """
+    removed = {k for k in rec if k.split("/")[-1] in DROP_FIELDS}
+    for k in removed:
+        del rec[k]
+    return {k.split("/")[-1] for k in removed}
+
+
+def redact_record(rec, redact):
+    """Blank narrative free-text fields when redaction is enabled, in place."""
+    if not redact:
+        return
+    for f in NARRATIVE_FIELDS:
+        if rec.get(f):
+            rec[f] = "[texte libre retiré de la version publiée]"
 
 
 def parse_geopoint(val):
@@ -129,28 +172,43 @@ def main():
     print(f"  {len(subs)} submissions")
 
     # Slim records: keep non-internal fields + parse geo
+    redact = bool(cfg.get("redact_narratives"))
     records = []
+    dropped = set()
     for s in subs:
         rec = {}
         for k, v in s.items():
+            leaf = k.split("/")[-1] if "/" in k else k
+            if leaf in DROP_FIELDS:
+                dropped.add(leaf)
+                continue
             if k in ("_submission_time", "_id"):
                 rec[k] = v
             elif not k.startswith("_") and "/" not in k:
                 rec[k] = v
             elif "/" in k:  # grouped field: keep leaf name
-                rec[k.split("/")[-1]] = v
+                rec[leaf] = v
+        redact_record(rec, redact)
         if geo_field:
             pt = parse_geopoint(s.get(geo_field) or rec.get(geo_field.split("/")[-1]))
             if pt:
                 rec["_geo"] = pt
         records.append(rec)
 
+    if dropped:
+        print(f"  removed identifying fields: {', '.join(sorted(dropped))}")
+    if redact:
+        print("  narrative free-text fields redacted (redact_narratives=true)")
+
     out = {
         "meta": {
-            "title": asset.get("name") or cfg.get("title", "Kobo Dashboard"),
+            # config.json wins so the displayed title can be changed without
+            # renaming the Kobo form itself.
+            "title": cfg.get("title") or asset.get("name") or "Kobo Dashboard",
             "generated_at": datetime.now(timezone.utc).isoformat(),
             "total": len(records),
             "geo_field": geo_field,
+            "redacted": redact,
         },
         "fields": fields,
         "records": records[: cfg.get("max_table_rows", 5000) + 100000],

@@ -16,7 +16,7 @@ An operations-focused view of the MVE/BVD daily field sitrep (WHO-branded):
 - **Daily narrative feed** — summaries and urgent flags, filterable by 🔴/🟠/🟢
 - **Completeness heatmap** — reporting completeness of operational indicators, per province over time
 - **Province & reporting-date filters**, filterable/sortable table
-- **PDF briefing**, **light/dark mode**, **password gate**, and a **manual import failsafe**
+- **PDF briefing**, **light/dark mode**, **access gate**, and a **manual import failsafe**
 
 ## Failsafe: manual data import
 
@@ -36,7 +36,57 @@ Kobo API ──(hourly, token in Secrets)──▶ scripts/fetch_data.py ──�
 ```
 
 The token lives in GitHub **Secrets**, only the CI runner sees it, and the browser
-only ever loads the already-fetched `data.json`. Safe to make the repo public.
+only ever loads the already-fetched `data.json`.
+
+## What is public, and what the access gate does not do
+
+The repo is public and the site is a static GitHub Pages deployment, so
+**`data/data.json` is fetchable by anyone who knows the URL** — the login form
+runs in the browser *after* that file is already downloadable. Treat the gate as
+deterrence against casual browsing, nothing more.
+
+Because of that, the published dataset is filtered rather than protected:
+
+- `scripts/fetch_data.py` drops every identifying field (`submitted_by`,
+  `deviceid`, `username`, submission UUIDs, device timestamps) before writing
+  `data/data.json`. `DROP_FIELDS` in that file is the list.
+- `scripts/scrub_data.py` applies the same filter to a file that already exists,
+  for anything committed before the filter was added.
+- `scripts/verify_public_build.py` runs in CI **before** the Pages upload and
+  fails the deploy if an identifier survives.
+- `index.html` sends `noindex, nofollow, noarchive` so the page and its data are
+  not meant to be indexed.
+
+Free-text narratives (`urgent_details`, the per-pillar notes) are **still
+published**, because they are what the briefing feed is for. Some of them
+describe security incidents and name localities. If that is not acceptable for
+your context, set `"redact_narratives": true` in `config.json` — every numeric
+indicator keeps working and the free text is replaced with a placeholder.
+
+If the data genuinely must stay confidential, a static host cannot deliver that.
+Move to something that authenticates the request itself: a private repo behind
+Cloudflare Access, Netlify password protection, or an authenticating proxy.
+
+### Changing the access credentials
+
+The gate stores a PBKDF2-HMAC-SHA256 hash (250,000 iterations, random salt) of
+`username:password` in the `GATE` constant in `index.html`. Never put the
+password itself in a commit message, a filename, or an issue. To rotate it:
+
+```bash
+python3 - <<'EOF'
+import hashlib, secrets, binascii
+user, pw = "oms", "your-new-password"
+salt = secrets.token_bytes(16); iters = 250000
+dk = hashlib.pbkdf2_hmac("sha256", f"{user}:{pw}".encode(), salt, iters, 32)
+print("salt:", binascii.hexlify(salt).decode())
+print("hash:", binascii.hexlify(dk).decode())
+EOF
+```
+
+Paste the two values into `GATE` in `index.html` and share the password out of
+band. Anyone who had the old one keeps nothing, but note the old hash stays in
+git history — so never reuse a password across systems.
 
 ## One-time setup
 
@@ -78,12 +128,28 @@ python -m http.server 8000             # open http://localhost:8000
 ## Files
 | File | Purpose |
 |------|---------|
-| `config.json` | Server, form UID, options |
-| `scripts/fetch_data.py` | Fetches + processes Kobo data (token from env) |
+| `config.json` | Server, form UID, title, narrative redaction switch |
+| `scripts/fetch_data.py` | Fetches + processes Kobo data, drops identifying fields |
+| `scripts/scrub_data.py` | Applies the same filter to an existing `data.json` |
+| `scripts/verify_public_build.py` | CI gate: fails the deploy if personal data would ship |
 | `index.html` | The dashboard (Chart.js + Leaflet, no build step) |
-| `.github/workflows/update-and-deploy.yml` | Hourly fetch + Pages deploy |
+| `assets/vendor/xlsx.full.min.js` | SheetJS 0.20.3, vendored — parses manual imports |
+| `.github/workflows/update-and-deploy.yml` | Hourly fetch, scrub, verify, Pages deploy |
 | `data/data.json` | Generated data (regenerated each run) |
+| `robots.txt`, `404.html` | Crawler policy and a branded not-found page |
 
 ## Tuning
 - **Refresh rate**: edit the `cron` in the workflow (`0 * * * *` = hourly; `*/15 * * * *` = every 15 min).
-- **Table columns**: `tableColumns()` in `index.html` shows the first 12 fields — adjust the slice.
+- **Table columns**: `TBL_COLS` in `index.html`.
+- **Title**: `title` in `config.json` and the `<h1 id="title">` in `index.html`.
+- **Entry-page note**: the `.gate-note` block in `index.html`.
+
+## Resilience notes
+- The hourly fetch is allowed to fail without blocking a deploy, so the site
+  stays up on the last good data. When that happens the run is annotated with a
+  warning and the dashboard shows a banner giving the age of the data.
+- Chart.js and Leaflet come from CDNs. If either is unreachable the dashboard
+  still renders KPIs, the feed, the table and the heatmap, and shows a per-chart
+  fallback message instead of a blank page.
+- jsPDF and SheetJS load only when the export or import button is first clicked,
+  keeping ~1.2 MB out of the initial page load.

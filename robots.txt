@@ -1,0 +1,8 @@
+User-agent: *
+Disallow: /
+
+# Note: for a GitHub Pages *project* site (user.github.io/repo/), crawlers read
+# robots.txt from the domain root, not from this path — so this file only takes
+# effect behind a custom domain. The authoritative control for this deployment
+# is the <meta name="robots" content="noindex, nofollow, noarchive, nosnippet">
+# tag in index.html. Keep both.

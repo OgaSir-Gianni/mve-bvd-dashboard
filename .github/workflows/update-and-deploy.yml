@@ -30,12 +30,29 @@ jobs:
       # unreachable or the token is missing, the site still ships with the
       # last committed data/data.json (and the manual import failsafe).
       - name: Fetch latest Kobo data
+        id: fetch
         continue-on-error: true
         env:
           KOBO_TOKEN: ${{ secrets.KOBO_TOKEN }}
           KOBO_SERVER: ${{ vars.KOBO_SERVER }}
           KOBO_ASSET_UID: ${{ vars.KOBO_ASSET_UID }}
         run: python scripts/fetch_data.py
+
+      # Make the masked failure visible. The deploy still proceeds on stale data
+      # (the dashboard shows its own age banner), but the run is annotated so a
+      # pipeline that quietly stopped refreshing does not read as healthy.
+      - name: Flag a failed refresh
+        if: steps.fetch.outcome != 'success'
+        run: |
+          echo "::warning title=Kobo refresh failed::Deploying the previously committed data/data.json. The dashboard will show a staleness banner."
+
+      # Belt and braces: strip identifiers even if the committed file predates
+      # the filter, then refuse to publish if anything identifying survives.
+      - name: Scrub personal data from the public build
+        run: python scripts/scrub_data.py
+
+      - name: Verify no personal data is being published
+        run: python scripts/verify_public_build.py
 
       - name: Upload site artifact
         uses: actions/upload-pages-artifact@v3
