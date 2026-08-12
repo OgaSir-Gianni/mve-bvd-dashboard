@@ -41,6 +41,19 @@
     background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.4'/%3E%3C/svg%3E");}
   .app{position:relative;z-index:1}
 
+  #gate{position:fixed;inset:0;z-index:200;display:none;align-items:center;justify-content:center;padding:24px;
+    overflow-y:auto;background:radial-gradient(1000px 600px at 50% 0%,#16222f,#0a0f16 70%)}
+  .gate-card{width:370px;max-width:100%;margin:auto;background:#141d29;border:1px solid #263447;border-radius:16px;
+    padding:30px 30px 26px;display:flex;flex-direction:column;gap:11px;text-align:left;box-shadow:0 30px 60px -20px rgba(0,0,0,.6)}
+  .gate-card .logo{height:44px;width:auto;margin:0 auto 6px;object-fit:contain}
+  .gate-card h1{font-family:var(--serif);color:#eef3f9;font-size:19px;margin:0;text-align:center;line-height:1.35}
+  .gate-card p{color:#8598ac;font-size:13px;margin:0}
+  .gate-field{display:flex;flex-direction:column;gap:5px}
+  .gate-field label{font-size:10.5px;color:#8598ac;text-transform:uppercase;letter-spacing:.6px;font-weight:600}
+  .gate-card input{background:#0e141d;border:1px solid #263447;border-radius:9px;padding:11px 13px;color:#eef3f9;font-size:14px;font-family:var(--sans);width:100%}
+  .gate-card input:focus{outline:1px solid #43c0cb}
+  .gate-card button{justify-content:center;padding:11px;margin-top:4px}
+  .gate-err{color:#e2564a;font-size:12.5px;min-height:16px;text-align:center}
 
   header{padding:16px 30px;border-bottom:1px solid var(--line-solid);
          display:flex;align-items:center;justify-content:space-between;gap:20px;flex-wrap:wrap;
@@ -189,6 +202,23 @@
 </style>
 </head>
 <body>
+<div id="gate">
+  <form id="gateForm" class="gate-card">
+    <img class="logo" src="assets/who-logo.png" alt="Organisation mondiale de la Santé" onerror="this.style.display='none'">
+    <h1>Vue d'ensemble des opérations — MVE/BVD</h1>
+    <p>Accès réservé. Veuillez vous identifier.</p>
+    <div class="gate-field">
+      <label for="gateUser">Nom d'utilisateur</label>
+      <input id="gateUser" type="text" autocomplete="username" autocapitalize="none" autocorrect="off" spellcheck="false">
+    </div>
+    <div class="gate-field">
+      <label for="gatePass">Mot de passe</label>
+      <input id="gatePass" type="password" autocomplete="current-password">
+    </div>
+    <button type="submit" class="btn btn-pdf" id="gateBtn">Se connecter</button>
+    <div id="gateErr" class="gate-err" role="alert" aria-live="polite"></div>
+  </form>
+</div>
 <div class="app">
 <header>
   <div class="brand">
@@ -781,19 +811,46 @@ function exportPDF(){
 function toast(m){const t=document.getElementById("toast");t.textContent=m;t.classList.add("show");clearTimeout(t._h);t._h=setTimeout(()=>t.classList.remove("show"),2600);}
 function esc(s){return String(s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));}
 
-/* ---------- boot ----------
-   The access gate has been temporarily removed and will be reworked later.
-   It was only deterrence, never access control: this is a static site, so
-   index.html and data/data.json are fetchable directly regardless of any
-   browser-side form. Anything that must genuinely stay private has to be kept
-   out of the published build (see scripts/fetch_data.py) or served from a host
-   that authenticates the request.
-   Chart.js and Leaflet are deferred, so they finish before DOMContentLoaded —
-   waiting for it means boot() never runs against a half-loaded page. */
+/* ---------- access gate ----------
+   Deterrence, not access control. This is a static site: index.html and
+   data/data.json are fetchable without ever reaching this form, so the gate
+   only discourages casual browsing. Anything that must genuinely stay private
+   has to be kept out of the published build (see scripts/fetch_data.py) or
+   served from a host that authenticates the request.
+   Credential is PBKDF2-HMAC-SHA256 over "user:password" with a random salt,
+   so the constant below is not a lookup-table target the way a bare SHA-256 is. */
+const GATE={
+  salt:"596d3436186db09409940607d394fdaa",
+  hash:"1d83ca72611a614a447ba6ced86bf0aba68fbc5a559f611cb0fb4a21645d4aa0",
+  iter:250000
+};
+const hex2buf=h=>new Uint8Array(h.match(/../g).map(b=>parseInt(b,16)));
+const buf2hex=b=>[...new Uint8Array(b)].map(x=>x.toString(16).padStart(2,"0")).join("");
+async function deriveGate(u,p){
+  const key=await crypto.subtle.importKey("raw",new TextEncoder().encode(u+":"+p),"PBKDF2",false,["deriveBits"]);
+  const bits=await crypto.subtle.deriveBits(
+    {name:"PBKDF2",salt:hex2buf(GATE.salt),iterations:GATE.iter,hash:"SHA-256"},key,256);
+  return buf2hex(bits);}
 let booted=false;
-function startApp(){if(!booted){booted=true;boot();}}
-if(document.readyState==="loading")document.addEventListener("DOMContentLoaded",startApp);
-else startApp();
+function unlock(){document.getElementById("gate").style.display="none";if(!booted){booted=true;boot();}}
+function initGate(){
+  try{if(sessionStorage.getItem("mve_auth")==="1"){unlock();return;}}catch(e){}
+  const gate=document.getElementById("gate"),err=document.getElementById("gateErr"),btn=document.getElementById("gateBtn");
+  gate.style.display="flex";
+  document.getElementById("gateForm").onsubmit=async e=>{e.preventDefault();
+    const u=document.getElementById("gateUser").value.trim().toLowerCase(),p=document.getElementById("gatePass").value;
+    err.textContent="";btn.disabled=true;btn.textContent="Vérification…";
+    let h="";try{h=await deriveGate(u,p);}catch(ex){h="";}
+    btn.disabled=false;btn.textContent="Se connecter";
+    if(h===GATE.hash){try{sessionStorage.setItem("mve_auth","1");}catch(ex){}unlock();}
+    else{err.textContent="Identifiants incorrects.";
+      document.getElementById("gatePass").value="";document.getElementById("gatePass").focus();}};
+  document.getElementById("gateUser").focus();}
+
+/* Chart.js and Leaflet are deferred, so they finish before DOMContentLoaded —
+   waiting for it means the gate never runs against a half-loaded page. */
+if(document.readyState==="loading")document.addEventListener("DOMContentLoaded",initGate);
+else initGate();
 </script>
 </body>
 </html>
