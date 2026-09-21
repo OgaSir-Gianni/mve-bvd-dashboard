@@ -16,7 +16,17 @@ An operations-focused view of the MVE/BVD daily field sitrep (WHO-branded):
 - **Daily narrative feed** — summaries and urgent flags, filterable by 🔴/🟠/🟢
 - **Completeness heatmap** — reporting completeness of operational indicators, per province over time
 - **Province & reporting-date filters**, filterable/sortable table
-- **PDF briefing**, **light/dark mode**, **access gate**, and a **manual import failsafe**
+- **PDF briefing**, **Excel export of the full dataset**, **light/dark mode**, **access gate**, and a **manual import failsafe**
+
+## Excel export
+
+**⬇ Exporter Excel** downloads the entire loaded dataset as a workbook: one row per
+report with choice codes replaced by their French labels, plus an *À propos* sheet
+recording when the data was generated and where it came from. It reads only the
+already-published `data/data.json` (or the manually imported file, if the failsafe is
+active), so the workbook can never contain more than any visitor could already fetch —
+the identifying fields are gone long before this button exists. The PDF covers the
+*filtered* view; the Excel export is deliberately everything.
 
 ## Failsafe: manual data import
 
@@ -133,13 +143,14 @@ python -m http.server 8000             # open http://localhost:8000
 | `scripts/scrub_data.py` | Applies the same filter to an existing `data.json` |
 | `scripts/verify_public_build.py` | CI gate: fails the deploy if personal data would ship |
 | `index.html` | The dashboard (Chart.js + Leaflet, no build step) |
-| `assets/vendor/xlsx.full.min.js` | SheetJS 0.20.3, vendored — parses manual imports |
+| `assets/vendor/xlsx.full.min.js` | SheetJS 0.20.3, vendored — manual imports + Excel export |
 | `.github/workflows/update-and-deploy.yml` | Hourly fetch, scrub, verify, Pages deploy |
 | `data/data.json` | Generated data (regenerated each run) |
 | `robots.txt`, `404.html` | Crawler policy and a branded not-found page |
 
 ## Tuning
-- **Refresh rate**: edit the `cron` in the workflow (`0 * * * *` = hourly; `*/15 * * * *` = every 15 min).
+- **Refresh rate**: edit the `cron` in the workflow (`17 * * * *` = hourly at :17; avoid
+  minute `0` — GitHub's on-the-hour slots are congested and those runs arrive hours late).
 - **Table columns**: `TBL_COLS` in `index.html`.
 - **Title**: `title` in `config.json` and the `<h1 id="title">` in `index.html`.
 - **Entry-page note**: the `.gate-note` block in `index.html`.

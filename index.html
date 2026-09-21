@@ -230,6 +230,7 @@
     <input type="file" id="importInput" accept=".xlsx,.xls,.csv" hidden>
     <button class="btn btn-ghost" id="importBtn" title="Importer un export Kobo (.xlsx / .csv) en cas de coupure du lien">⬆ Importer (secours)</button>
     <button class="btn btn-ghost" id="themeBtn" title="Basculer clair / sombre">🌙 Sombre</button>
+    <button class="btn btn-ghost" id="xlsxBtn" title="Télécharger l'ensemble des données publiées au format Excel">⬇ Exporter Excel</button>
     <button class="btn btn-pdf" id="pdfBtn">⬇ Briefing PDF</button>
     <span class="badge" id="updated"></span>
   </div>
@@ -455,6 +456,12 @@ function wireControls(){
     try{await ensurePDF();exportPDF();}
     catch(err){toast("Export PDF indisponible hors ligne : "+err.message);}
     finally{pdfBtn.disabled=false;pdfBtn.textContent=label;}};
+  const xlsxBtn=document.getElementById("xlsxBtn");
+  xlsxBtn.onclick=async()=>{
+    const label=xlsxBtn.textContent;xlsxBtn.disabled=true;xlsxBtn.textContent="⏳ Préparation…";
+    try{await ensureXLSX();exportXLSX();}
+    catch(err){toast("Export Excel indisponible hors ligne : "+err.message);}
+    finally{xlsxBtn.disabled=false;xlsxBtn.textContent=label;}};
   document.getElementById("importBtn").onclick=()=>document.getElementById("importInput").click();
   document.getElementById("importInput").onchange=async e=>{
     const f=e.target.files[0];e.target.value="";if(!f)return;
@@ -480,16 +487,22 @@ function hideSkeleton(){const sk=document.getElementById("skeleton");if(sk)sk.re
 
 /* The hourly job is allowed to fail without blocking a deploy, so a stale
    data.json ships silently. Surface the age rather than letting a briefing be
-   read as current. */
+   read as current — but GitHub's shared cron routinely delivers "hourly" runs
+   two to four hours apart even when every run succeeds, so an age of a few
+   hours is normal operation, not a broken link. Only a day-plus gap justifies
+   telling the reader the synchronisation itself looks down. */
 function updateFreshness(m){
   const b=document.getElementById("staleBanner");if(!b)return;
   if(!m||!m.generated_at||m.source==="manual"){b.hidden=true;return;}
   const age=(Date.now()-new Date(m.generated_at).getTime())/36e5;
-  if(!(age>3)){b.hidden=true;return;}
+  if(!(age>6)){b.hidden=true;return;}
   const hot=age>24;
   b.className="banner"+(hot?" hot":"");b.hidden=false;
   const when=age<48?Math.round(age)+" h":Math.round(age/24)+" jours";
-  b.innerHTML=`<span>${hot?"⚠":"ℹ"} <b>Données vieilles de ${when}</b> — la synchronisation automatique avec Kobo n'a pas abouti depuis le ${esc(new Date(m.generated_at).toLocaleString("fr-FR"))}. Les chiffres affichés ne reflètent pas forcément la situation actuelle.</span>`;}
+  const stamp=esc(new Date(m.generated_at).toLocaleString("fr-FR"));
+  b.innerHTML=hot
+    ?`<span>⚠ <b>Données vieilles de ${when}</b> — la mise à jour automatique semble interrompue depuis le ${stamp}. Les chiffres affichés ne reflètent pas forcément la situation actuelle ; en attendant le rétablissement, l'import de secours (⬆) permet de charger un export Kobo récent.</span>`
+    :`<span>ℹ <b>Dernière mise à jour il y a ${when}</b> (le ${stamp}). Le rafraîchissement automatique a parfois quelques heures de retard ; les chiffres très récents peuvent ne pas encore apparaître.</span>`;}
 
 function setStatus(s){feedStatus=s;
   document.querySelectorAll("#feedFilter .seg").forEach(b=>b.classList.toggle("on",b.dataset.s===s));
@@ -750,6 +763,44 @@ async function importFile(file){
     const ds={meta:{title:"RDC – MVE/BVD",generated_at:new Date().toISOString(),total:recs.length,source:"manual",filename:file.name},fields:[],records:recs};
     feedStatus="all";useDataset(ds,true);toast(`Import réussi — ${recs.length} rapports`);
   }catch(err){toast("Échec de l'import : "+err.message);}}
+
+/* ---------- Excel export ----------
+   Exports EVERY record of the loaded dataset (not the filtered view — the PDF
+   covers that), one row per report, choice codes replaced by their labels.
+   Only the already-published data/data.json is read, so the workbook can never
+   contain more than what any visitor could fetch anyway. */
+function exportXLSX(){
+  const recs=DATA.records.slice().sort((a,b)=>(a._submission_time||"")<(b._submission_time||"")?-1:1);
+  if(!recs.length){toast("Aucune donnée à exporter.");return;}
+  const known=(DATA.fields||[]).map(f=>f.name).filter(n=>recs.some(r=>has(r,n)));
+  const seen=new Set([...known,"_id","_submission_time","_geo"]);
+  const rest=[];recs.forEach(r=>Object.keys(r).forEach(k=>{if(!seen.has(k)){seen.add(k);rest.push(k);}}));
+  const cols=[...known,...rest,"_id","_submission_time"];
+  const header=cols.map(k=>k==="_id"?"ID Kobo":k==="_submission_time"?"Soumis le":(F[k]&&F[k].label?F[k].label:k));
+  const aoa=[header];
+  recs.forEach(r=>aoa.push(cols.map(k=>{
+    const v=r[k];if(v===undefined||v===null||v==="")return null;
+    const fl=F[k];
+    if(fl&&fl.choices&&fl.choices[v]!==undefined)return fl.choices[v];
+    if((fl&&fl.numeric)||NUMERIC_FIELDS.has(k)){const n=Number(v);return isNaN(n)?v:n;}
+    return v;})));
+  const ws=XLSX.utils.aoa_to_sheet(aoa);
+  ws["!cols"]=header.map(h=>({wch:Math.min(46,Math.max(11,String(h).length+2))}));
+  const m=DATA.meta||{};
+  const about=XLSX.utils.aoa_to_sheet([
+    ["Titre",m.title||"MVE/BVD"],
+    ["Exporté le",new Date().toLocaleString("fr-FR")],
+    ["Données générées le",m.generated_at?new Date(m.generated_at).toLocaleString("fr-FR"):"—"],
+    ["Source",m.source==="manual"?"Import manuel (secours) — "+(m.filename||"fichier"):"Synchronisation automatique KoboToolbox"],
+    ["Rapports",recs.length],
+    ["Note","Les champs identifiants (soumetteur, appareil) sont retirés avant publication et ne figurent pas dans ce fichier."]]);
+  about["!cols"]=[{wch:22},{wch:80}];
+  const wb=XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb,ws,"Données");
+  XLSX.utils.book_append_sheet(wb,about,"À propos");
+  const dates=[...new Set(recs.map(dateOf).filter(Boolean))].sort();
+  XLSX.writeFile(wb,`donnees-MVE-BVD-${dates[dates.length-1]||new Date().toISOString().slice(0,10)}.xlsx`);
+  toast(`Export Excel téléchargé — ${recs.length} rapports`);}
 
 /* ---------- PDF briefing (operations) ---------- */
 function exportPDF(){

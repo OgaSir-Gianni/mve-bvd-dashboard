@@ -2,7 +2,10 @@ name: Update Kobo data & deploy
 
 on:
   schedule:
-    - cron: "0 * * * *"      # every hour, on the hour (UTC)
+    # Every hour at :17 rather than :00 — on-the-hour slots are GitHub's most
+    # congested and those runs are routinely delayed by hours or dropped;
+    # an off-peak minute gets much closer to an actual hourly cadence.
+    - cron: "17 * * * *"
   workflow_dispatch:          # allow manual runs from the Actions tab
   push:
     branches: [ main ]        # redeploy when you edit the dashboard
